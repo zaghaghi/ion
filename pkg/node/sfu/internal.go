@@ -54,16 +54,17 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	allowedCodecs := make([]uint8, 0)
-	tracks := make([]*pb.Track, 0)
-	for _, stream := range sdpObj.GetStreams() {
-		for id, track := range stream.GetTracks() {
+	stream := pb.Stream{}
+	for _, s := range sdpObj.GetStreams() {
+		stream.Id = s.GetID()
+		for id, track := range s.GetTracks() {
 			pt, codecType := getPubPTForTrack(videoCodec, track, sdpObj)
 
 			if len(track.GetSSRCS()) == 0 {
 				return nil, errors.New("publish: ssrc not found")
 			}
 			allowedCodecs = append(allowedCodecs, pt)
-			tracks = append(tracks, &pb.Track{Id: id, Sid: stream.GetID(), Ssrc: int32(track.GetSSRCS()[0]), Payload: int32(pt), Type: track.GetMedia(), Codec: codecType})
+			stream.Tracks = append(stream.Tracks, &pb.Track{Id: id, Ssrc: uint32(track.GetSSRCS()[0]), Payload: uint32(pt), Type: track.GetMedia(), Codec: codecType})
 		}
 	}
 
@@ -85,15 +86,15 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 
 	router.AddPub(uid, pub)
 
-	log.Infof("publish tracks %v, answer = %v", tracks, answer)
+	log.Infof("publish stream %v, answer = %v", stream, answer)
 
 	return &pb.PublishReply{
 		Mediainfo: &pb.MediaInfo{Mid: mid},
 		Description: &pb.SessionDescription{
-			Type: int32(answer.Type),
+			Type: answer.Type.String(),
 			Sdp:  answer.SDP,
 		},
-		Tracks: tracks,
+		Stream: &stream,
 	}, nil
 }
 
@@ -128,18 +129,21 @@ func (s *server) Subscribe(ctx context.Context, in *pb.SubscribeRequest) (*pb.Su
 		Subscribe: true,
 	}
 
-	rtcOptions.Bandwidth = int(in.Options.Bandwidth)
-	rtcOptions.TransportCC = in.Options.Transportcc
+	if in.Options != nil {
+		if in.Options.Bandwidth != 0 {
+			rtcOptions.Bandwidth = int(in.Options.Bandwidth)
+		}
+
+		rtcOptions.TransportCC = in.Options.Transportcc
+	}
 
 	subID := uuid.New().String()
 
-	log.Infof("subscribe tracks=%v", in.Tracks)
+	log.Infof("subscribe tracks=%v", in.Stream.Tracks)
 	rtcOptions.Ssrcpt = make(map[uint32]uint8)
 
-	tracks := make(map[string]*pb.Track)
-	for _, track := range in.Tracks {
+	for _, track := range in.Stream.Tracks {
 		rtcOptions.Ssrcpt[uint32(track.Ssrc)] = uint8(track.Payload)
-		tracks[track.Sid+" "+track.Id] = track
 	}
 
 	sdpObj, err := sdptransform.Parse(sdp)
@@ -148,10 +152,10 @@ func (s *server) Subscribe(ctx context.Context, in *pb.SubscribeRequest) (*pb.Su
 		return nil, errors.New("subscribe: sdp parse failed")
 	}
 
-	ssrcPTMap := make(map[int32]uint8)
-	allowedCodecs := make([]uint8, 0, len(tracks))
+	ssrcPTMap := make(map[uint32]uint8)
+	allowedCodecs := make([]uint8, 0, len(in.Stream.Tracks))
 
-	for _, track := range tracks {
+	for _, track := range in.Stream.Tracks {
 		// Find pt for track given track.Payload and sdp
 		ssrcPTMap[track.Ssrc] = getSubPTForTrack(track, sdpObj)
 		allowedCodecs = append(allowedCodecs, ssrcPTMap[track.Ssrc])
@@ -170,7 +174,7 @@ func (s *server) Subscribe(ctx context.Context, in *pb.SubscribeRequest) (*pb.Su
 
 	go handleTrickle(router, sub)
 
-	for _, track := range tracks {
+	for _, track := range in.Stream.Tracks {
 		ssrc := uint32(track.Ssrc)
 		// Get payload type from request track
 		pt := uint8(track.Payload)
@@ -181,10 +185,8 @@ func (s *server) Subscribe(ctx context.Context, in *pb.SubscribeRequest) (*pb.Su
 
 		// I2AacsRLsZZriGapnvPKiKBcLi8rTrO1jOpq c84ded42-d2b0-4351-88d2-b7d240c33435
 		//                streamID                        trackID
-		streamID := track.Sid
-		trackID := track.Id
-		log.Infof("AddTrack: codec:%s, ssrc:%d, pt:%d, streamID %s, trackID %s", track.Codec, ssrc, pt, streamID, trackID)
-		_, err := sub.AddSendTrack(ssrc, pt, streamID, track.Id)
+		log.Infof("AddTrack: codec:%s, ssrc:%d, pt:%d, streamID %s, trackID %s", track.Codec, ssrc, pt, in.Stream.Id, track.Id)
+		_, err := sub.AddSendTrack(ssrc, pt, in.Stream.Id, track.Id)
 		if err != nil {
 			log.Errorf("err=%v", err)
 		}
@@ -204,7 +206,7 @@ func (s *server) Subscribe(ctx context.Context, in *pb.SubscribeRequest) (*pb.Su
 	return &pb.SubscribeReply{
 		Mid: subID,
 		Description: &pb.SessionDescription{
-			Type: int32(answer.Type),
+			Type: answer.Type.String(),
 			Sdp:  answer.SDP,
 		},
 	}, nil

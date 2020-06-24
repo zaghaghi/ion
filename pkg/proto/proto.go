@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 const (
@@ -156,25 +158,16 @@ func UnmarshalNodeField(key string, value string) (*NodeInfo, error) {
 	return &node, nil
 }
 
-type TrackInfo struct {
-	ID      string `json:"id"`
-	Ssrc    int    `json:"ssrc"`
-	Payload int    `json:"pt"`
-	Type    string `json:"type"`
-	Codec   string `json:"codec"`
-	Fmtp    string `json:"fmtp"`
-}
-
-func MarshalTrackField(id string, infos []TrackInfo) (string, string, error) {
-	str, err := json.Marshal(infos)
+func MarshalTrackField(id string, tracks []*pb.Track) (string, string, error) {
+	str, err := json.Marshal(tracks)
 	if err != nil {
 		return "track/" + id, "", fmt.Errorf("Marshal: %v", err)
 	}
 	return "track/" + id, string(str), nil
 }
 
-func UnmarshalTrackField(key string, value string) (string, *[]TrackInfo, error) {
-	var tracks []TrackInfo
+func UnmarshalTrackField(key string, value string) (string, []*pb.Track, error) {
+	var tracks []*pb.Track
 	if err := json.Unmarshal([]byte(value), &tracks); err != nil {
 		return "", nil, fmt.Errorf("Unmarshal: %v", err)
 	}
@@ -182,7 +175,7 @@ func UnmarshalTrackField(key string, value string) (string, *[]TrackInfo, error)
 		return "", nil, fmt.Errorf("Invalid track failed => %s", key)
 	}
 	msid := strings.Split(key, "/")[1]
-	return msid, &tracks, nil
+	return msid, tracks, nil
 }
 
 func GetPubNodePath(rid, uid string) string {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pion/ion/pkg/proto"
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 var (
@@ -17,9 +18,9 @@ var (
 	mid    = proto.MID("mid-xxxxx-xxxxx-xxxxx-xxxxx")
 	msid0  = "pion audio"
 	msid1  = "pion video"
-	track0 = proto.TrackInfo{Ssrc: 3694449886, Payload: 111, Type: "audio", ID: "aid0"}
-	track1 = proto.TrackInfo{Ssrc: 8888888888, Payload: 96, Type: "video", ID: "vid1"}
-	track2 = proto.TrackInfo{Ssrc: 6666666666, Payload: 117, Type: "video", ID: "vid2"}
+	track0 = pb.Track{Ssrc: 3694449886, Payload: 111, Type: "audio", Id: "aid0"}
+	track1 = pb.Track{Ssrc: 3694449887, Payload: 96, Type: "video", Id: "vid1"}
+	track2 = pb.Track{Ssrc: 3694449888, Payload: 117, Type: "video", Id: "vid2"}
 	node0  = proto.NodeInfo{Name: "node-name-01", ID: "node-id-01", Type: "origin"}
 	node1  = proto.NodeInfo{Name: "node-name-02", ID: "node-id-02", Type: "shadow"}
 
@@ -50,7 +51,7 @@ func init() {
 }
 
 func TestRedisStorage(t *testing.T) {
-	tracks := []proto.TrackInfo{track0}
+	tracks := []pb.Track{track0}
 	field, value, err := proto.MarshalTrackField(msid0, tracks)
 	if err != nil {
 		t.Error(err)
@@ -61,7 +62,7 @@ func TestRedisStorage(t *testing.T) {
 		t.Error(err)
 	}
 
-	tracks = []proto.TrackInfo{track1, track2}
+	tracks = []pb.Track{track1, track2}
 	field, value, err = proto.MarshalTrackField(msid1, tracks)
 	if err != nil {
 		t.Error(err)

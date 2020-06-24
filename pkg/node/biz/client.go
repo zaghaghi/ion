@@ -56,7 +56,7 @@ func join(peer *signal.Peer, msg proto.JoinMsg) (interface{}, *nprotoo.Error) {
 				log.Errorf("Unmarshal pub response %v", err)
 				return
 			}
-			log.Infof("IslbGetPubs: result=%v", result)
+			log.Infof("IslbGetPubs: result=%s", result)
 			for _, pub := range resMsg.Pubs {
 				if pub.MID == "" {
 					continue
@@ -124,12 +124,12 @@ func publish(peer *signal.Peer, msg pb.PublishRequest) (interface{}, *nprotoo.Er
 
 	log.Infof("publish: result => %v", result)
 	mid := result.Mediainfo.Mid
-	tracks := result.Tracks
+
 	islb, found := getRPCForIslb()
 	if !found {
 		return nil, util.NewNpError(500, "Not found any node for islb.")
 	}
-	islb.AsyncRequest(proto.IslbOnStreamAdd, util.Map("rid", rid, "nid", nid, "uid", uid, "mid", mid, "tracks", tracks))
+	islb.AsyncRequest(proto.IslbOnStreamAdd, util.Map("rid", rid, "nid", nid, "uid", uid, "mid", mid, "stream", result.Stream))
 	return result, nil
 }
 
@@ -189,8 +189,6 @@ func subscribe(peer *signal.Peer, msg pb.SubscribeRequest) (interface{}, *nproto
 	room := signal.GetRoomByPeer(peer.ID())
 	rid := room.ID()
 
-	jsep := msg.Description
-
 	islb, found := getRPCForIslb()
 	if !found {
 		return nil, util.NewNpError(500, "Not found any node for islb.")
@@ -201,21 +199,16 @@ func subscribe(peer *signal.Peer, msg pb.SubscribeRequest) (interface{}, *nproto
 		log.Warnf("reject: %d => %s", nerr.Code, nerr.Reason)
 		return nil, util.NewNpError(nerr.Code, nerr.Reason)
 	}
-	var some map[string]interface{}
-	if err := minfo.Unmarshal(&some); err != nil {
+	var stream pb.Stream
+	if err := minfo.Unmarshal(&stream); err != nil {
 		return nil, err
 	}
 
+	msg.Stream = &stream
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	res, err := sfu.Subscribe(ctx, &pb.SubscribeRequest{
-		Mid: string(mid),
-		Description: &pb.SessionDescription{
-			Type: int32(jsep.Type),
-			Sdp:  jsep.Sdp,
-		},
-		Tracks: some["tracks"],
-	})
+	res, err := sfu.Subscribe(ctx, &msg)
 
 	if err != nil {
 		log.Warnf("reject: %s", err)
@@ -272,21 +265,21 @@ func broadcast(peer *signal.Peer, msg proto.BroadcastMsg) (interface{}, *nprotoo
 
 func trickle(peer *signal.Peer, msg proto.TrickleMsg) (interface{}, *nprotoo.Error) {
 	log.Infof("biz.trickle peer.ID()=%s msg=%v", peer.ID(), msg)
-	mid := msg.MID
+	// mid := string(msg.MID)
 
-	// Validate
-	if msg.RID == "" || msg.UID == "" {
-		return nil, ridError
-	}
+	// // Validate
+	// if msg.RID == "" || msg.UID == "" {
+	// 	return nil, ridError
+	// }
 
-	_, sfu, err := getRPCForSFU(mid)
-	if err != nil {
-		log.Warnf("Not found any sfu node, reject: %d => %s", err.Code, err.Reason)
-		return nil, util.NewNpError(err.Code, err.Reason)
-	}
+	// _, sfu, err := getRPCForSFU(mid)
+	// if err != nil {
+	// 	log.Warnf("Not found any sfu node, reject: %d => %s", err.Code, err.Reason)
+	// 	return nil, util.NewNpError(err.Code, err.Reason)
+	// }
 
-	trickle := msg.Trickle
+	// trickle := msg.Trickle
 
-	sfu.AsyncRequest(proto.ClientTrickleICE, util.Map("mid", mid, "trickle", trickle))
+	// sfu.AsyncRequest(proto.ClientTrickleICE, util.Map("mid", mid, "trickle", trickle))
 	return emptyMap, nil
 }

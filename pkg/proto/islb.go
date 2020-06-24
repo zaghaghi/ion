@@ -1,9 +1,11 @@
 package proto
 
+import pb "github.com/pion/ion/pkg/proto/sfu"
+
 type PubInfo struct {
 	MediaInfo
 	Info   ClientUserInfo `json:"info"`
-	Tracks TrackMap       `json:"tracks"`
+	Stream pb.Stream      `json:"stream"`
 }
 
 type GetPubResp struct {

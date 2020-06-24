@@ -12,6 +12,8 @@ import (
 	"github.com/pion/ion/pkg/log"
 	"github.com/pion/ion/pkg/proto"
 	"github.com/pion/ion/pkg/util"
+
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 // WatchServiceNodes .
@@ -138,6 +140,7 @@ func findServiceNode(data proto.FindServiceParams) (interface{}, *nprotoo.Error)
 }
 
 func streamAdd(data proto.StreamAddMsg) (interface{}, *nprotoo.Error) {
+	log.Debugf("streamAdd: => %+v", data)
 	ukey := proto.UserInfo{
 		DC:  dc,
 		RID: data.RID,
@@ -161,21 +164,20 @@ func streamAdd(data proto.StreamAddMsg) (interface{}, *nprotoo.Error) {
 		log.Errorf("Set: %v ", err)
 	}
 
-	for msid, track := range data.Tracks {
-		var infos []proto.TrackInfo
-		infos = append(infos, track...)
-
-		field, value, err := proto.MarshalTrackField(msid, infos)
-		if err != nil {
-			log.Errorf("MarshalTrackField: %v ", err)
-			continue
-		}
-		log.Infof("SetTrackField: mkey, field, value = %s, %s, %s", mkey, field, value)
-		err = redis.HSetTTL(mkey, field, value, redisLongKeyTTL)
-		if err != nil {
-			log.Errorf("redis.HSetTTL err = %v", err)
-		}
+	// for _, track := range data.Stream.Tracks {
+	// msid := data.Stream.Id
+	log.Infof("%v+", data.Stream)
+	field, value, err = proto.MarshalTrackField(data.Stream.Id, data.Stream.Tracks)
+	if err != nil {
+		log.Errorf("MarshalTrackField: %v ", err)
+		// continue
 	}
+	log.Infof("SetTrackField: mkey, field, value = %s, %s, %s", mkey, field, value)
+	err = redis.HSetTTL(mkey, field, value, redisLongKeyTTL)
+	if err != nil {
+		log.Errorf("redis.HSetTTL err = %v", err)
+	}
+	// }
 
 	// dc1/room1/user/info/${uid} info {"name": "Guest"}
 	fields := redis.HGetAll(ukey)
@@ -212,8 +214,7 @@ func streamRemove(data proto.StreamRemoveMsg) (map[string]interface{}, *nprotoo.
 }
 
 func getPubs(data proto.RoomInfo) (proto.GetPubResp, *nprotoo.Error) {
-	rid := data.RID //util.Val(data, "rid")
-
+	rid := data.RID
 	key := proto.MediaInfo{
 		DC:  dc,
 		RID: rid,
@@ -234,15 +235,15 @@ func getPubs(data proto.RoomInfo) (proto.GetPubResp, *nprotoo.Error) {
 		}.BuildKey())
 		trackFields := redis.HGetAll(path)
 
-		tracks := make(map[string][]proto.TrackInfo)
+		var stream pb.Stream
 		for key, value := range trackFields {
 			if strings.HasPrefix(key, "track/") {
-				msid, infos, err := proto.UnmarshalTrackField(key, value)
+				msid, tracks, err := proto.UnmarshalTrackField(key, value)
 				if err != nil {
 					log.Errorf("%v", err)
 				}
-				log.Debugf("msid => %s, tracks => %v\n", msid, infos)
-				tracks[msid] = *infos
+				log.Debugf("msid => %s, tracks => %v\n", msid, tracks)
+				stream = pb.Stream{Id: msid, Tracks: tracks}
 			}
 		}
 
@@ -258,7 +259,7 @@ func getPubs(data proto.RoomInfo) (proto.GetPubResp, *nprotoo.Error) {
 		pub := proto.PubInfo{
 			MediaInfo: *info,
 			Info:      extraInfo,
-			Tracks:    tracks,
+			Stream:    stream,
 		}
 		pubs = append(pubs, pub)
 	}
@@ -305,7 +306,7 @@ func clientLeave(data proto.RoomInfo) (interface{}, *nprotoo.Error) {
 	return struct{}{}, nil
 }
 
-func getMediaInfo(data proto.MediaInfo) (interface{}, *nprotoo.Error) {
+func getMediaInfo(data proto.MediaInfo) (*pb.Stream, *nprotoo.Error) {
 	// Ensure DC
 	data.DC = dc
 
@@ -316,21 +317,20 @@ func getMediaInfo(data proto.MediaInfo) (interface{}, *nprotoo.Error) {
 		key := keys[0]
 		log.Infof("Got: key => %s", key)
 		fields := redis.HGetAll(key)
-		tracks := make(map[string][]proto.TrackInfo)
+
+		// There should only be a single entry per stream
 		for key, value := range fields {
 			if strings.HasPrefix(key, "track/") {
-				msid, infos, err := proto.UnmarshalTrackField(key, value)
+				id, tracks, err := proto.UnmarshalTrackField(key, value)
 				if err != nil {
 					log.Errorf("%v", err)
 				}
-				log.Debugf("msid => %s, tracks => %v\n", msid, infos)
-				tracks[msid] = *infos
+				log.Debugf("msid => %s, tracks => %v\n", id, tracks)
+				resp := pb.Stream{Id: id, Tracks: tracks}
+				log.Infof("getMediaInfo: resp=%v", resp)
+				return &resp, nil
 			}
 		}
-
-		resp := util.Map("mid", data.MID, "tracks", tracks)
-		log.Infof("getMediaInfo: resp=%v", resp)
-		return resp, nil
 	}
 
 	return nil, util.NewNpError(404, "MediaInfo Not found")

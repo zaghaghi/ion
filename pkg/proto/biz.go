@@ -3,7 +3,7 @@ package proto
 import (
 	"encoding/json"
 
-	"github.com/pion/webrtc/v2"
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 type ClientUserInfo struct {
@@ -23,27 +23,6 @@ type RoomInfo struct {
 	UID UID `json:"uid"`
 }
 
-type RTCInfo struct {
-	Jsep webrtc.SessionDescription `json:"jsep"`
-}
-
-type PublishOptions struct {
-	Codec       string `json:"codec"`
-	Resolution  string `json:"resolution"`
-	Bandwidth   int    `json:"bandwidth"`
-	Audio       bool   `json:"audio"`
-	Video       bool   `json:"video"`
-	Screen      bool   `json:"screen"`
-	TransportCC bool   `json:"transportCC,omitempty"`
-}
-
-type SubscribeOptions struct {
-	Bandwidth   int  `json:"bandwidth"`
-	TransportCC bool `json:"transportCC"`
-}
-
-type TrackMap map[string][]TrackInfo
-
 /// Messages ///
 
 type JoinMsg struct {
@@ -54,42 +33,6 @@ type JoinMsg struct {
 type LeaveMsg struct {
 	RoomInfo
 	Info ClientUserInfo `json:"info"`
-}
-
-type PublishMsg struct {
-	RoomInfo
-	RTCInfo
-	Options PublishOptions `json:"options"`
-}
-
-type PublishResponseMsg struct {
-	MediaInfo
-	RTCInfo
-	Tracks TrackMap `json:"tracks"`
-}
-
-type UnpublishMsg struct {
-	MediaInfo
-}
-
-type SFUSubscribeMsg struct {
-	SubscribeMsg
-	Tracks TrackMap `json:"tracks"`
-}
-
-type SubscribeMsg struct {
-	MediaInfo
-	RTCInfo
-	Options SubscribeOptions
-}
-
-type SubscribeResponseMsg struct {
-	MediaInfo
-	RTCInfo
-}
-
-type UnsubscribeMsg struct {
-	MediaInfo
 }
 
 type BroadcastMsg struct {
@@ -106,7 +49,7 @@ type TrickleMsg struct {
 type StreamAddMsg struct {
 	MediaInfo
 	Info   ClientUserInfo `json:"info"`
-	Tracks TrackMap       `json:"tracks"`
+	Stream pb.Stream      `json:"stream"`
 }
 
 type StreamRemoveMsg struct {

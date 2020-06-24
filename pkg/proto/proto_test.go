@@ -3,6 +3,8 @@ package proto
 import (
 	"fmt"
 	"testing"
+
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 func TestKeyBuildAndParse(t *testing.T) {
@@ -40,8 +42,8 @@ func TestKeyBuildAndParse(t *testing.T) {
 }
 
 func TestMarshal(t *testing.T) {
-	var tracks []TrackInfo
-	tracks = append(tracks, TrackInfo{Ssrc: 3694449886, Payload: 96, Type: "audio", ID: "aid"})
+	var tracks []pb.Track
+	tracks = append(tracks, pb.Track{Ssrc: 3694449886, Payload: 96, Type: "audio", Id: "aid"})
 	key, value, err := MarshalTrackField("msidxxxxxx", tracks)
 	if err != nil {
 		t.Error(err)

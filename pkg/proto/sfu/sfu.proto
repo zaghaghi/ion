@@ -21,7 +21,7 @@ message PublishRequest {
 message PublishReply {
     MediaInfo mediainfo = 1;
     SessionDescription description = 2;
-    repeated Track tracks = 3;
+    Stream stream = 3;
 }
 
 message UnpublishRequest {
@@ -33,7 +33,7 @@ message UnpublishReply {}
 message SubscribeRequest {
     string mid = 1;
     SessionDescription description = 2;
-    repeated Track tracks = 3;
+    Stream stream = 3;
     SubscribeOptions options = 4;
 }
 
@@ -49,14 +49,14 @@ message UnsubscribeRequest {
 message UnsubscribeReply {}
 
 message SessionDescription {
-    int32 type = 1;
+    string type = 1; // "answer" | "offer" | "pranswer" | "rollback"
     string sdp = 2;
 }
 
 message PublishOptions {
     string codec = 1;
     string resolution = 2;
-    int32 bandwidth = 3;
+    uint32 bandwidth = 3;
     bool audio = 4;
     bool video = 5;
     bool screen = 6;
@@ -64,7 +64,7 @@ message PublishOptions {
 }
 
 message SubscribeOptions {
-    int32 bandwidth = 1;
+    uint32 bandwidth = 1;
     bool transportcc = 2;
 }
 
@@ -76,11 +76,15 @@ message MediaInfo {
     string mid = 5;
 }
 
+message Stream {
+    string id = 1;
+    repeated Track tracks = 2;
+}
+
 message Track {
     string id = 1;
-    string sid = 2; // Stream ID
-    int32 ssrc = 3;
-    int32 payload = 4;
+    uint32 ssrc = 3;
+    uint32 payload = 4;
     string type = 5;
     string codec = 6;
     string fmtp = 7;

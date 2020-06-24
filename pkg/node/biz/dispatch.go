@@ -43,22 +43,22 @@ func Entry(method string, peer *signal.Peer, msg json.RawMessage, accept signal.
 			result, topErr = leave(peer, msgData)
 		}
 	case proto.ClientPublish:
-		var msgData proto.PublishMsg
+		var msgData pb.PublishRequest
 		if topErr = ParseProtoo(msg, &msgData); topErr == nil {
 			result, topErr = publish(peer, msgData)
 		}
 	case proto.ClientUnPublish:
-		var msgData proto.UnpublishMsg
+		var msgData pb.UnpublishRequest
 		if topErr = ParseProtoo(msg, &msgData); topErr == nil {
 			result, topErr = unpublish(peer, msgData)
 		}
 	case proto.ClientSubscribe:
-		var msgData proto.SubscribeMsg
+		var msgData pb.SubscribeRequest
 		if topErr = ParseProtoo(msg, &msgData); topErr == nil {
 			result, topErr = subscribe(peer, msgData)
 		}
 	case proto.ClientUnSubscribe:
-		var msgData proto.UnsubscribeMsg
+		var msgData pb.UnsubscribeRequest
 		if topErr = ParseProtoo(msg, &msgData); topErr == nil {
 			result, topErr = unsubscribe(peer, msgData)
 		}
@@ -136,7 +136,7 @@ func getRPCForSFU(mid string) (string, pb.SFUClient, *nprotoo.Error) {
 		return "", nil, &nprotoo.Error{Code: 123, Reason: "Unmarshal error getRPCForSFU"}
 	}
 
-	log.Infof("SFU result => %v", result)
+	log.Infof("SFU result => %s", result)
 	addr := answer.GRPC
 	sfu, found := sfus[addr]
 	if !found {
