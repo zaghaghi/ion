@@ -5,12 +5,12 @@ import (
 
 	"github.com/notedit/sdp"
 	"github.com/pion/ion/pkg/log"
-	"github.com/pion/ion/pkg/proto"
+	pb "github.com/pion/ion/pkg/proto/sfu"
 	transport "github.com/pion/ion/pkg/rtc/transport"
 	"github.com/pion/webrtc/v2"
 )
 
-func getSubPTForTrack(track proto.TrackInfo, sdpObj *sdp.SDPInfo) uint8 {
+func getSubPTForTrack(track *pb.Track, sdpObj *sdp.SDPInfo) uint8 {
 	medias := sdpObj.GetMedias()
 	log.Infof("Medias are %v", medias)
 
@@ -21,7 +21,7 @@ func getSubPTForTrack(track proto.TrackInfo, sdpObj *sdp.SDPInfo) uint8 {
 			log.Infof("Codes are %v", codec)
 			pt := codec.GetType()
 			// 	If offer contains pub PT, use that
-			if track.Payload == pt {
+			if int(track.Payload) == pt {
 				return uint8(track.Payload)
 			}
 			// Otherwise look for first supported pt that can be transformed from pub

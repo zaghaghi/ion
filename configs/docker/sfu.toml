@@ -5,7 +5,8 @@ pprof = ":6062"
 dc = "dc1"
 
 # internet ip
-addr = "127.0.0.1"
+addr = "sfu"
+port = ":50051"
 
 [router]
 # pass bandwidth feeback to pub

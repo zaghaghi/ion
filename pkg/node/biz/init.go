@@ -4,6 +4,7 @@ import (
 	nprotoo "github.com/cloudwebrtc/nats-protoo"
 	"github.com/pion/ion/pkg/discovery"
 	"github.com/pion/ion/pkg/log"
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 var (
@@ -13,6 +14,7 @@ var (
 	nid      = "biz-unkown-node-id"
 	protoo   *nprotoo.NatsProtoo
 	rpcs     map[string]*nprotoo.Requestor
+	sfus     map[string]pb.SFUClient
 	services map[string]discovery.Node
 )
 
@@ -22,6 +24,7 @@ func Init(dcID, nodeID, rpcID, eventID string, natsURL string) {
 	nid = nodeID
 	services = make(map[string]discovery.Node)
 	rpcs = make(map[string]*nprotoo.Requestor)
+	sfus = make(map[string]pb.SFUClient)
 	protoo = nprotoo.NewNatsProtoo(natsURL)
 }
 

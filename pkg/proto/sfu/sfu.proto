@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+option go_package = "github.com/pion/ion/pkg/proto/sfu/sfu";
+
+package sfu;
+
+service SFU {
+    rpc Publish(PublishRequest) returns (PublishReply) {}
+    rpc Unpublish(UnpublishRequest) returns (UnpublishReply) {}
+    rpc Subscribe(SubscribeRequest) returns (SubscribeReply) {}
+    rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeReply) {}
+}
+
+message PublishRequest {
+    string uid = 1;
+    string rid = 2;
+    PublishOptions options = 3;
+    SessionDescription description = 4;
+}
+
+message PublishReply {
+    MediaInfo mediainfo = 1;
+    SessionDescription description = 2;
+    repeated Track tracks = 3;
+}
+
+message UnpublishRequest {
+    string mid = 1;
+}
+
+message UnpublishReply {}
+
+message SubscribeRequest {
+    string mid = 1;
+    SessionDescription description = 2;
+    repeated Track tracks = 3;
+    SubscribeOptions options = 4;
+}
+
+message SubscribeReply {
+    string mid = 1;
+    SessionDescription description = 2;
+}
+
+message UnsubscribeRequest {
+    string mid = 1;
+}
+
+message UnsubscribeReply {}
+
+message SessionDescription {
+    int32 type = 1;
+    string sdp = 2;
+}
+
+message PublishOptions {
+    string codec = 1;
+    string resolution = 2;
+    int32 bandwidth = 3;
+    bool audio = 4;
+    bool video = 5;
+    bool screen = 6;
+    bool transportcc = 7;
+}
+
+message SubscribeOptions {
+    int32 bandwidth = 1;
+    bool transportcc = 2;
+}
+
+message MediaInfo {
+    string dc = 1;
+    string nid = 2;
+    string rid = 3;
+    string uid = 4;
+    string mid = 5;
+}
+
+message Track {
+    string id = 1;
+    string sid = 2; // Stream ID
+    int32 ssrc = 3;
+    int32 payload = 4;
+    string type = 5;
+    string codec = 6;
+    string fmtp = 7;
+}

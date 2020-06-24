@@ -27,4 +27,5 @@ type GetSFURPCParams struct {
 	ID      string
 	Name    string
 	Service string
+	GRPC    string
 }

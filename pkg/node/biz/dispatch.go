@@ -11,6 +11,9 @@ import (
 	"github.com/pion/ion/pkg/proto"
 	"github.com/pion/ion/pkg/signal"
 	"github.com/pion/ion/pkg/util"
+	"google.golang.org/grpc"
+
+	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
 // ParseProtoo Unmarshals a protoo payload.
@@ -118,14 +121,14 @@ func handleSFUBroadCast(msg nprotoo.Notification, subj string) {
 	}(msg)
 }
 
-func getRPCForSFU(mid proto.MID) (string, *nprotoo.Requestor, *nprotoo.Error) {
+func getRPCForSFU(mid string) (string, pb.SFUClient, *nprotoo.Error) {
 	islb, found := getRPCForIslb()
 	if !found {
 		return "", nil, util.NewNpError(500, "Not found any node for islb.")
 	}
-	result, err := islb.SyncRequest(proto.IslbFindService, util.Map("service", "sfu", "mid", mid))
-	if err != nil {
-		return "", nil, err
+	result, nerr := islb.SyncRequest(proto.IslbFindService, util.Map("service", "sfu", "mid", mid))
+	if nerr != nil {
+		return "", nil, nerr
 	}
 
 	var answer proto.GetSFURPCParams
@@ -134,12 +137,15 @@ func getRPCForSFU(mid proto.MID) (string, *nprotoo.Requestor, *nprotoo.Error) {
 	}
 
 	log.Infof("SFU result => %v", result)
-	rpcID := answer.RPCID
-	rpc, found := rpcs[rpcID]
+	addr := answer.GRPC
+	sfu, found := sfus[addr]
 	if !found {
-		rpc = protoo.NewRequestor(rpcID)
-		protoo.OnBroadcast(answer.EventID, handleSFUBroadCast)
-		rpcs[rpcID] = rpc
+		conn, err := grpc.Dial(answer.GRPC, grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Panicf("did not connect: %v", err)
+		}
+		sfu = pb.NewSFUClient(conn)
+		sfus[addr] = sfu
 	}
-	return answer.ID, rpc, nil
+	return answer.ID, sfu, nil
 }

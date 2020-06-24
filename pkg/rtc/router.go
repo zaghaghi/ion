@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/pion/ion/pkg/log"
-	"github.com/pion/ion/pkg/proto"
 	"github.com/pion/ion/pkg/rtc/plugins"
 	"github.com/pion/ion/pkg/rtc/transport"
 	"github.com/pion/ion/pkg/util"
@@ -33,24 +32,24 @@ type RouterConfig struct {
 // Router is rtp router
 type Router struct {
 	pub           transport.Transport
-	subs          map[proto.MID]transport.Transport
+	subs          map[string]transport.Transport
 	subLock       sync.RWMutex
 	stop          bool
 	liveTime      time.Time
 	pluginChain   *plugins.PluginChain
-	subChans      map[proto.MID]chan *rtp.Packet
+	subChans      map[string]chan *rtp.Packet
 	subShutdownCh chan string
 	rembChan      chan *rtcp.ReceiverEstimatedMaximumBitrate
 }
 
 // NewRouter return a new Router
-func NewRouter(id proto.MID) *Router {
+func NewRouter(id string) *Router {
 	log.Infof("NewRouter id=%s", id)
 	return &Router{
-		subs:          make(map[proto.MID]transport.Transport),
+		subs:          make(map[string]transport.Transport),
 		liveTime:      time.Now().Add(liveCycle),
 		pluginChain:   plugins.NewPluginChain(string(id)),
-		subChans:      make(map[proto.MID]chan *rtp.Packet),
+		subChans:      make(map[string]chan *rtp.Packet),
 		subShutdownCh: make(chan string, 1),
 		rembChan:      make(chan *rtcp.ReceiverEstimatedMaximumBitrate),
 	}
@@ -79,7 +78,7 @@ func (r *Router) start() {
 			select {
 			case subID := <-r.subShutdownCh:
 				log.Infof("Got transport shutdown %v", subID)
-				r.DelSub(proto.MID(subID))
+				r.DelSub(string(subID))
 			default:
 			}
 
@@ -116,7 +115,7 @@ func (r *Router) start() {
 }
 
 // AddPub add a pub transport
-func (r *Router) AddPub(id proto.UID, t transport.Transport) transport.Transport {
+func (r *Router) AddPub(id string, t transport.Transport) transport.Transport {
 	log.Infof("AddPub id=%s", id)
 	r.pub = t
 	r.pluginChain.AttachPub(t)
@@ -136,7 +135,7 @@ func (r *Router) DelPub() {
 	r.pub = nil
 }
 
-func MapRouter(fn func(id proto.MID, r *Router)) {
+func MapRouter(fn func(id string, r *Router)) {
 	routerLock.RLock()
 	defer routerLock.RUnlock()
 	for id, r := range routers {
@@ -150,7 +149,7 @@ func (r *Router) GetPub() transport.Transport {
 	return r.pub
 }
 
-func (r *Router) subWriteLoop(subID proto.MID, trans transport.Transport) {
+func (r *Router) subWriteLoop(subID string, trans transport.Transport) {
 	for pkt := range r.subChans[subID] {
 		// log.Infof(" WriteRTP %v:%v to %v PT: %v", pkt.SSRC, pkt.SequenceNumber, trans.ID(), pkt.Header.PayloadType)
 
@@ -158,7 +157,7 @@ func (r *Router) subWriteLoop(subID proto.MID, trans transport.Transport) {
 			// log.Errorf("wt.WriteRTP err=%v", err)
 			// del sub when err is increasing
 			if trans.WriteErrTotal() > maxWriteErr {
-				r.DelSub(proto.MID(trans.ID()))
+				r.DelSub(string(trans.ID()))
 			}
 		}
 		trans.WriteErrReset()
@@ -225,7 +224,7 @@ func (r *Router) rembLoop() {
 	}
 }
 
-func (r *Router) subFeedbackLoop(subID proto.MID, trans transport.Transport) {
+func (r *Router) subFeedbackLoop(subID string, trans transport.Transport) {
 	for pkt := range trans.GetRTCPChan() {
 		if r.stop {
 			break
@@ -271,7 +270,7 @@ func (r *Router) subFeedbackLoop(subID proto.MID, trans transport.Transport) {
 }
 
 // AddSub add a sub to router
-func (r *Router) AddSub(id proto.MID, t transport.Transport) transport.Transport {
+func (r *Router) AddSub(id string, t transport.Transport) transport.Transport {
 	//fix panic: assignment to entry in nil map
 	if r.stop {
 		return nil
@@ -290,7 +289,7 @@ func (r *Router) AddSub(id proto.MID, t transport.Transport) transport.Transport
 }
 
 // GetSub get a sub by id
-func (r *Router) GetSub(id proto.MID) transport.Transport {
+func (r *Router) GetSub(id string) transport.Transport {
 	r.subLock.RLock()
 	defer r.subLock.RUnlock()
 	// log.Infof("Router.GetSub id=%s sub=%v", id, r.subs[id])
@@ -298,7 +297,7 @@ func (r *Router) GetSub(id proto.MID) transport.Transport {
 }
 
 // GetSubs get all subs
-func (r *Router) GetSubs() map[proto.MID]transport.Transport {
+func (r *Router) GetSubs() map[string]transport.Transport {
 	r.subLock.RLock()
 	defer r.subLock.RUnlock()
 	// log.Infof("Router.GetSubs len=%v", len(r.subs))
@@ -315,7 +314,7 @@ func (r *Router) HasNoneSub() bool {
 }
 
 // DelSub del sub by id
-func (r *Router) DelSub(id proto.MID) {
+func (r *Router) DelSub(id string) {
 	log.Infof("Router.DelSub id=%s", id)
 	r.subLock.Lock()
 	defer r.subLock.Unlock()
@@ -333,7 +332,7 @@ func (r *Router) DelSub(id proto.MID) {
 func (r *Router) DelSubs() {
 	log.Infof("Router.DelSubs")
 	r.subLock.RLock()
-	keys := make([]proto.MID, 0, len(r.subs))
+	keys := make([]string, 0, len(r.subs))
 	for k := range r.subs {
 		keys = append(keys, k)
 	}
@@ -355,7 +354,7 @@ func (r *Router) Close() {
 	r.DelSubs()
 }
 
-func (r *Router) ReSendRTP(sid proto.MID, ssrc uint32, sn uint16) bool {
+func (r *Router) ReSendRTP(sid string, ssrc uint32, sn uint16) bool {
 	if r.pub == nil {
 		return false
 	}

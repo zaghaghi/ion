@@ -111,7 +111,8 @@ func findServiceNode(data proto.FindServiceParams) (interface{}, *nprotoo.Error)
 				if service == node.Info["service"] && minfo.NID == id {
 					rpcID := discovery.GetRPCChannel(node)
 					eventID := discovery.GetEventChannel(node)
-					resp := proto.GetSFURPCParams{Name: name, RPCID: rpcID, EventID: eventID, Service: service, ID: id}
+					gprc := discovery.GetGRPCAddress(node)
+					resp := proto.GetSFURPCParams{Name: name, RPCID: rpcID, EventID: eventID, Service: service, ID: id, GRPC: gprc}
 					log.Infof("findServiceNode: by node ID %s, [%s] %s => %s", minfo.NID, service, name, rpcID)
 					return resp, nil
 				}
@@ -124,9 +125,10 @@ func findServiceNode(data proto.FindServiceParams) (interface{}, *nprotoo.Error)
 		if service == node.Info["service"] {
 			rpcID := discovery.GetRPCChannel(node)
 			eventID := discovery.GetEventChannel(node)
+			gprc := discovery.GetGRPCAddress(node)
 			name := node.Info["name"]
 			id := node.Info["id"]
-			resp := proto.GetSFURPCParams{Name: name, RPCID: rpcID, EventID: eventID, Service: service, ID: id}
+			resp := proto.GetSFURPCParams{Name: name, RPCID: rpcID, EventID: eventID, Service: service, ID: id, GRPC: gprc}
 			log.Infof("findServiceNode: [%s] %s => %s", service, name, rpcID)
 			return resp, nil
 		}
