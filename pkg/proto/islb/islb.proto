@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+option go_package = "github.com/pion/ion/pkg/proto/islb";
+
+package islb;
+
+import "pkg/proto/media/media.proto";
+
+service ISLB {
+    rpc FindService(FindServiceRequest) returns (FindServiceReply) {}
+    rpc StreamAdd(StreamAddRequest) returns (StreamAddReply) {}
+    rpc StreamRemove(StreamRemoveRequest) returns (StreamRemoveReply) {}
+    rpc GetPubs(GetPubsRequest) returns (GetPubsReply) {}
+    rpc Join(JoinRequest) returns (JoinReply) {}
+    rpc Leave(LeaveRequest) returns (LeaveReply) {}
+    rpc GetStream(GetStreamRequest) returns (GetStreamReply) {}
+    rpc Broadcast(BroadcastRequest) returns (BroadcastReply) {}
+}
+
+message FindServiceRequest {
+    string service = 1;
+    string mid = 2;
+}
+
+message FindServiceReply {
+    string id = 1;
+    string name = 2;
+    string service = 3;
+    string grpc = 4;
+}
+
+message StreamAddRequest {
+    media.Info minfo = 1;
+    UserMetadata uinfo = 2;
+    media.Stream stream = 3;
+}
+
+message StreamAddReply {}
+
+message StreamRemoveRequest {
+    media.Info minfo = 1;
+}
+
+message StreamRemoveReply {}
+
+message GetPubsRequest {
+    string rid = 1;
+    string uid = 2;
+}
+
+message GetPubsReply {
+    repeated Pub pubs = 2;
+}
+
+message JoinRequest {
+    string rid = 1;
+    string uid = 2;
+    UserMetadata metadata = 3;
+}
+
+message JoinReply {}
+
+message LeaveRequest {
+    string rid = 1;
+    string uid = 2;
+}
+
+message LeaveReply {}
+
+message GetStreamRequest {
+    media.Info minfo = 1;
+}
+
+message GetStreamReply {
+    media.Stream stream = 1;
+}
+
+message BroadcastRequest {
+    string rid = 1;
+    string uid = 2;
+    bytes payload = 3;
+}
+
+message BroadcastReply {}
+
+message UserMetadata {
+    string name = 1;
+}
+
+message UserInfo {
+    string dc = 1;
+    string rid = 2;
+    string uid = 3;
+}
+
+message NodeInfo {
+    string id = 1;
+    string name = 2;
+    string type = 3; // origin | shadow
+}
+
+message Pub {
+    media.Info minfo = 1;
+    UserMetadata uinfo = 2;
+    media.Stream stream = 3;
+}

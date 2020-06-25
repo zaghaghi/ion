@@ -29,16 +29,15 @@ func main() {
 	}
 
 	serviceNode := discovery.NewServiceNode(conf.Etcd.Addrs, conf.Global.Dc)
-	serviceNode.RegisterNode("islb", "node-islb", "islb-channel-id", "")
+	serviceNode.RegisterNode("islb", "node-islb", "islb-channel-id", conf.Global.Port)
 
 	redisCfg := db.Config{
 		Addrs: conf.Redis.Addrs,
 		Pwd:   conf.Redis.Pwd,
 		DB:    conf.Redis.DB,
 	}
-	rpcID := serviceNode.GetRPCChannel()
-	eventID := serviceNode.GetEventChannel()
-	islb.Init(conf.Global.Dc, serviceNode.NodeInfo().ID, rpcID, eventID, redisCfg, conf.Etcd.Addrs, conf.Nats.URL)
+
+	islb.Init(conf.Global.Dc, serviceNode.NodeInfo().ID, conf.Global.Port, redisCfg, conf.Etcd.Addrs, conf.Nats.URL)
 
 	serviceWatcher := discovery.NewServiceWatcher(conf.Etcd.Addrs, conf.Global.Dc)
 	go serviceWatcher.WatchServiceNode("", islb.WatchServiceNodes)

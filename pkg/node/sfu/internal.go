@@ -13,6 +13,7 @@ import (
 	transport "github.com/pion/ion/pkg/rtc/transport"
 	"github.com/pion/webrtc/v2"
 
+	media "github.com/pion/ion/pkg/proto/media"
 	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
@@ -54,7 +55,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	}
 
 	allowedCodecs := make([]uint8, 0)
-	stream := pb.Stream{}
+	stream := media.Stream{}
 	for _, s := range sdpObj.GetStreams() {
 		stream.Id = s.GetID()
 		for id, track := range s.GetTracks() {
@@ -64,7 +65,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 				return nil, errors.New("publish: ssrc not found")
 			}
 			allowedCodecs = append(allowedCodecs, pt)
-			stream.Tracks = append(stream.Tracks, &pb.Track{Id: id, Ssrc: uint32(track.GetSSRCS()[0]), Payload: uint32(pt), Type: track.GetMedia(), Codec: codecType})
+			stream.Tracks = append(stream.Tracks, &media.Track{Id: id, Ssrc: uint32(track.GetSSRCS()[0]), Payload: uint32(pt), Type: track.GetMedia(), Codec: codecType})
 		}
 	}
 
@@ -89,7 +90,7 @@ func (s *server) Publish(ctx context.Context, in *pb.PublishRequest) (*pb.Publis
 	log.Infof("publish stream %v, answer = %v", stream, answer)
 
 	return &pb.PublishReply{
-		Mediainfo: &pb.MediaInfo{Mid: mid},
+		Mediainfo: &media.Info{Mid: mid},
 		Description: &pb.SessionDescription{
 			Type: answer.Type.String(),
 			Sdp:  answer.SDP,

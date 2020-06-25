@@ -1,8 +1,10 @@
 syntax = "proto3";
 
-option go_package = "github.com/pion/ion/pkg/proto/sfu/sfu";
+option go_package = "github.com/pion/ion/pkg/proto/sfu";
 
 package sfu;
+
+import "pkg/proto/media/media.proto";
 
 service SFU {
     rpc Publish(PublishRequest) returns (PublishReply) {}
@@ -19,9 +21,9 @@ message PublishRequest {
 }
 
 message PublishReply {
-    MediaInfo mediainfo = 1;
+    media.Info mediainfo = 1;
     SessionDescription description = 2;
-    Stream stream = 3;
+    media.Stream stream = 3;
 }
 
 message UnpublishRequest {
@@ -33,7 +35,7 @@ message UnpublishReply {}
 message SubscribeRequest {
     string mid = 1;
     SessionDescription description = 2;
-    Stream stream = 3;
+    media.Stream stream = 3;
     SubscribeOptions options = 4;
 }
 
@@ -66,26 +68,4 @@ message PublishOptions {
 message SubscribeOptions {
     uint32 bandwidth = 1;
     bool transportcc = 2;
-}
-
-message MediaInfo {
-    string dc = 1;
-    string nid = 2;
-    string rid = 3;
-    string uid = 4;
-    string mid = 5;
-}
-
-message Stream {
-    string id = 1;
-    repeated Track tracks = 2;
-}
-
-message Track {
-    string id = 1;
-    uint32 ssrc = 3;
-    uint32 payload = 4;
-    string type = 5;
-    string codec = 6;
-    string fmtp = 7;
 }

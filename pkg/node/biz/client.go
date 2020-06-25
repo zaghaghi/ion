@@ -11,6 +11,8 @@ import (
 	"github.com/pion/ion/pkg/signal"
 	"github.com/pion/ion/pkg/util"
 
+	islbpb "github.com/pion/ion/pkg/proto/islb"
+	media "github.com/pion/ion/pkg/proto/media"
 	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
@@ -25,47 +27,57 @@ var (
 func join(peer *signal.Peer, msg proto.JoinMsg) (interface{}, *nprotoo.Error) {
 	log.Infof("biz.join peer.ID()=%s msg=%v", peer.ID(), msg)
 	rid := msg.RID
+	uid := peer.ID()
 
 	// Validate
 	if msg.RID == "" {
 		return nil, ridError
 	}
 
-	//already joined this room
+	// User has already joined this room
 	if signal.HasPeer(rid, peer) {
 		return emptyMap, nil
 	}
+
 	signal.AddPeer(rid, peer)
 
 	islb, found := getRPCForIslb()
 	if !found {
 		return nil, util.NewNpError(500, "Not found any node for islb.")
 	}
+
 	// Send join => islb
-	info := msg.Info
-	uid := peer.ID()
-	_, err := islb.SyncRequest(proto.IslbClientOnJoin, util.Map("rid", rid, "uid", uid, "info", info))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := islb.Join(ctx, &islbpb.JoinRequest{Rid: rid, Uid: uid, Metadata: &islbpb.UserMetadata{
+		Name: msg.Info.Name,
+	}})
 	if err != nil {
 		log.Errorf("IslbClientOnJoin failed %v", err.Error())
 	}
+
 	// Send getPubs => islb
-	islb.AsyncRequest(proto.IslbGetPubs, msg.RoomInfo).Then(
-		func(result nprotoo.RawMessage) {
-			var resMsg proto.GetPubResp
-			if err := result.Unmarshal(&resMsg); err != nil {
-				log.Errorf("Unmarshal pub response %v", err)
-				return
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		res, err := islb.GetPubs(ctx, &islbpb.GetPubsRequest{
+			Rid: rid,
+			Uid: uid,
+		})
+
+		if err != nil {
+			log.Errorf("error getting pubs for rid => %s, uid => %s", rid, uid)
+			return
+		}
+
+		log.Infof("GetPubs: result=%s", res)
+		for _, pub := range res.Pubs {
+			if pub.Minfo.Mid == "" {
+				continue
 			}
-			log.Infof("IslbGetPubs: result=%s", result)
-			for _, pub := range resMsg.Pubs {
-				if pub.MID == "" {
-					continue
-				}
-				notif := proto.StreamAddMsg(pub)
-				peer.Notify(proto.ClientOnStreamAdd, notif)
-			}
-		},
-		func(err *nprotoo.Error) {})
+			peer.Notify(proto.ClientOnStreamAdd, pub)
+		}
+	}()
 
 	return emptyMap, nil
 }
@@ -88,8 +100,23 @@ func leave(peer *signal.Peer, msg proto.LeaveMsg) (interface{}, *nprotoo.Error) 
 		return nil, util.NewNpError(500, "Not found any node for islb.")
 	}
 
-	islb.AsyncRequest(proto.IslbOnStreamRemove, util.Map("rid", rid, "uid", uid))
-	_, err := islb.SyncRequest(proto.IslbClientOnLeave, util.Map("rid", rid, "uid", uid))
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		islb.StreamRemove(ctx, &islbpb.StreamRemoveRequest{
+			Minfo: &media.Info{
+				Rid: rid,
+				Uid: uid,
+			},
+		})
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := islb.Leave(ctx, &islbpb.LeaveRequest{
+		Rid: rid,
+		Uid: uid,
+	})
 	if err != nil {
 		log.Errorf("IslbOnStreamRemove failed %v", err.Error())
 	}
@@ -100,10 +127,10 @@ func leave(peer *signal.Peer, msg proto.LeaveMsg) (interface{}, *nprotoo.Error) 
 func publish(peer *signal.Peer, msg pb.PublishRequest) (interface{}, *nprotoo.Error) {
 	log.Infof("biz.publish peer.ID()=%s", peer.ID())
 
-	nid, sfu, nerr := getRPCForSFU("")
-	if nerr != nil {
-		log.Warnf("Not found any sfu node, reject: %d => %s", nerr.Code, nerr.Reason)
-		return nil, util.NewNpError(nerr.Code, nerr.Reason)
+	nid, sfu, err := getRPCForSFU("")
+	if err != nil {
+		log.Warnf("Not found any sfu node, reject: %d => %s", 500, err)
+		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
 	}
 
 	room := signal.GetRoomByPeer(peer.ID())
@@ -115,22 +142,35 @@ func publish(peer *signal.Peer, msg pb.PublishRequest) (interface{}, *nprotoo.Er
 	uid := peer.ID()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	result, err := sfu.Publish(ctx, &msg)
+	res, err := sfu.Publish(ctx, &msg)
 
 	if err != nil {
 		log.Warnf("reject: %s", err)
 		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
 	}
 
-	log.Infof("publish: result => %v", result)
-	mid := result.Mediainfo.Mid
+	log.Infof("publish: res => %v", res)
 
 	islb, found := getRPCForIslb()
 	if !found {
-		return nil, util.NewNpError(500, "Not found any node for islb.")
+		return nil, util.NewNpError(500, "islb node not found")
 	}
-	islb.AsyncRequest(proto.IslbOnStreamAdd, util.Map("rid", rid, "nid", nid, "uid", uid, "mid", mid, "stream", result.Stream))
-	return result, nil
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		islb.StreamAdd(ctx, &islbpb.StreamAddRequest{
+			Minfo: &media.Info{
+				Rid: rid,
+				Nid: nid,
+				Uid: uid,
+				Mid: res.Mediainfo.Mid,
+			},
+			Stream: res.Stream,
+		})
+	}()
+
+	return res, nil
 }
 
 // unpublish from app
@@ -140,15 +180,15 @@ func unpublish(peer *signal.Peer, msg pb.UnpublishRequest) (interface{}, *nproto
 	mid := msg.Mid
 	uid := peer.ID()
 
-	_, sfu, nerr := getRPCForSFU(mid)
-	if nerr != nil {
-		log.Warnf("Not found any sfu node, reject: %d => %s", nerr.Code, nerr.Reason)
-		return nil, nerr
+	_, sfu, err := getRPCForSFU(mid)
+	if err != nil {
+		log.Warnf("Not found any sfu node, reject: %s", err)
+		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := sfu.Unpublish(ctx, &pb.UnpublishRequest{Mid: string(mid)})
+	_, err = sfu.Unpublish(ctx, &pb.UnpublishRequest{Mid: string(mid)})
 	if err != nil {
 		log.Warnf("reject: %s", err)
 		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
@@ -158,9 +198,15 @@ func unpublish(peer *signal.Peer, msg pb.UnpublishRequest) (interface{}, *nproto
 	if !found {
 		return nil, util.NewNpError(500, "Not found any node for islb.")
 	}
-	// if this mid is a webrtc pub
-	// tell islb stream-remove, `rtc.DelPub(mid)` will be done when islb broadcast stream-remove
-	islb.AsyncRequest(proto.IslbOnStreamRemove, util.Map("uid", uid, "mid", mid))
+
+	// if this mid is a webrtc pub tell islb stream-remove,
+	// `rtc.DelPub(mid)` will be done when islb broadcasts stream-remove
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		islb.StreamRemove(ctx, &islbpb.StreamRemoveRequest{Minfo: &media.Info{Uid: uid, Mid: mid}})
+	}()
+
 	return emptyMap, nil
 }
 
@@ -175,10 +221,10 @@ func subscribe(peer *signal.Peer, msg pb.SubscribeRequest) (interface{}, *nproto
 		return nil, jsepError
 	}
 
-	nodeID, sfu, nerr := getRPCForSFU(mid)
-	if nerr != nil {
-		log.Warnf("Not found any sfu node, reject: %d => %s", nerr.Code, nerr.Reason)
-		return nil, util.NewNpError(nerr.Code, nerr.Reason)
+	nodeID, sfu, err := getRPCForSFU(mid)
+	if err != nil {
+		log.Warnf("Not found any sfu node, reject: %d => %s", err, err)
+		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
 	}
 
 	// TODO:
@@ -194,19 +240,17 @@ func subscribe(peer *signal.Peer, msg pb.SubscribeRequest) (interface{}, *nproto
 		return nil, util.NewNpError(500, "Not found any node for islb.")
 	}
 
-	minfo, nerr := islb.SyncRequest(proto.IslbGetMediaInfo, proto.MediaInfo{RID: rid, MID: proto.MID(mid)})
-	if nerr != nil {
-		log.Warnf("reject: %d => %s", nerr.Code, nerr.Reason)
-		return nil, util.NewNpError(nerr.Code, nerr.Reason)
-	}
-	var stream pb.Stream
-	if err := minfo.Unmarshal(&stream); err != nil {
-		return nil, err
-	}
-
-	msg.Stream = &stream
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	sres, err := islb.GetStream(ctx, &islbpb.GetStreamRequest{Minfo: &media.Info{Rid: rid, Mid: mid}})
+	if err != nil {
+		log.Warnf("reject: %s", err)
+		return nil, util.NewNpError(404, fmt.Sprintf("%s", err))
+	}
+
+	msg.Stream = sres.Stream
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	res, err := sfu.Subscribe(ctx, &msg)
 
@@ -228,10 +272,10 @@ func unsubscribe(peer *signal.Peer, msg pb.UnsubscribeRequest) (interface{}, *np
 		return nil, midError
 	}
 
-	_, sfu, nerr := getRPCForSFU(mid)
-	if nerr != nil {
-		log.Warnf("Not found any sfu node, reject: %d => %s", nerr.Code, nerr.Reason)
-		return nil, util.NewNpError(nerr.Code, nerr.Reason)
+	_, sfu, err := getRPCForSFU(mid)
+	if err != nil {
+		log.Warnf("Not found any sfu node, reject: %s", err)
+		return nil, util.NewNpError(500, fmt.Sprintf("%s", err))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -256,10 +300,15 @@ func broadcast(peer *signal.Peer, msg proto.BroadcastMsg) (interface{}, *nprotoo
 
 	islb, found := getRPCForIslb()
 	if !found {
-		return nil, util.NewNpError(500, "Not found any node for islb.")
+		return nil, util.NewNpError(500, "islb not found")
 	}
-	rid, uid, info := msg.RID, msg.UID, msg.Info
-	islb.AsyncRequest(proto.IslbOnBroadcast, util.Map("rid", rid, "uid", uid, "info", info))
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		islb.Broadcast(ctx, &islbpb.BroadcastRequest{Rid: msg.RID, Uid: msg.UID, Payload: msg.Info})
+	}()
+
 	return emptyMap, nil
 }
 

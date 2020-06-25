@@ -1,9 +1,11 @@
 package biz
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	nprotoo "github.com/cloudwebrtc/nats-protoo"
 	"github.com/pion/ion/pkg/discovery"
@@ -13,6 +15,7 @@ import (
 	"github.com/pion/ion/pkg/util"
 	"google.golang.org/grpc"
 
+	islbpb "github.com/pion/ion/pkg/proto/islb"
 	pb "github.com/pion/ion/pkg/proto/sfu"
 )
 
@@ -81,21 +84,25 @@ func Entry(method string, peer *signal.Peer, msg json.RawMessage, accept signal.
 	}
 }
 
-func getRPCForIslb() (*nprotoo.Requestor, bool) {
+func getRPCForIslb() (islbpb.ISLBClient, bool) {
 	for _, item := range services {
 		if item.Info["service"] == "islb" {
 			id := item.Info["id"]
-			rpc, found := rpcs[id]
+			islb, found := islbs[id]
 			if !found {
-				rpcID := discovery.GetRPCChannel(item)
-				log.Infof("Create rpc [%s] for islb", rpcID)
-				rpc = protoo.NewRequestor(rpcID)
-				rpcs[id] = rpc
+				addr := discovery.GetGRPCAddress(item)
+				conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
+				if err != nil {
+					log.Panicf("did not connect: %v", err)
+				}
+				islbs[id] = islbpb.NewISLBClient(conn)
+				log.Infof("Created grpc client for islb at [%s]", addr)
+				islbs[id] = islb
 			}
-			return rpc, true
+			return islb, true
 		}
 	}
-	log.Warnf("No islb node was found.")
+	log.Warnf("islb node not found.")
 	return nil, false
 }
 
@@ -115,37 +122,39 @@ func handleSFUBroadCast(msg nprotoo.Notification, subj string) {
 		case proto.SFUStreamRemove:
 			islb, found := getRPCForIslb()
 			if found {
-				islb.AsyncRequest(proto.IslbOnStreamRemove, data)
+				islb.StreamRemove()
+				// islb.AsyncRequest(proto.IslbOnStreamRemove, data)
 			}
 		}
 	}(msg)
 }
 
-func getRPCForSFU(mid string) (string, pb.SFUClient, *nprotoo.Error) {
+func getRPCForSFU(mid string) (string, pb.SFUClient, error) {
 	islb, found := getRPCForIslb()
 	if !found {
-		return "", nil, util.NewNpError(500, "Not found any node for islb.")
-	}
-	result, nerr := islb.SyncRequest(proto.IslbFindService, util.Map("service", "sfu", "mid", mid))
-	if nerr != nil {
-		return "", nil, nerr
+		return "", nil, fmt.Errorf("islb node not found")
 	}
 
-	var answer proto.GetSFURPCParams
-	if err := json.Unmarshal(result, &answer); err != nil {
-		return "", nil, &nprotoo.Error{Code: 123, Reason: "Unmarshal error getRPCForSFU"}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := islb.FindService(ctx, &islbpb.FindServiceRequest{Service: "sfu", Mid: mid})
+	if err != nil {
+		return "", nil, err
 	}
 
 	log.Infof("SFU result => %s", result)
-	addr := answer.GRPC
+	addr := result.Grpc
 	sfu, found := sfus[addr]
 	if !found {
-		conn, err := grpc.Dial(answer.GRPC, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial(result.Grpc, grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			log.Panicf("did not connect: %v", err)
+			return "", nil, fmt.Errorf("sfu node not found")
 		}
+
 		sfu = pb.NewSFUClient(conn)
 		sfus[addr] = sfu
 	}
-	return answer.ID, sfu, nil
+
+	return result.Id, sfu, nil
 }

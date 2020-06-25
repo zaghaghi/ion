@@ -26,6 +26,7 @@ func init() {
 }
 
 type global struct {
+	Port  string `mapstructure:"port"`
 	Pprof string `mapstructure:"pprof"`
 	Dc    string `mapstructure:"dc"`
 	// TestIP []string `mapstructure:"testip"`

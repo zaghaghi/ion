@@ -3,7 +3,7 @@ package proto
 import (
 	"encoding/json"
 
-	pb "github.com/pion/ion/pkg/proto/sfu"
+	media "github.com/pion/ion/pkg/proto/media"
 )
 
 type ClientUserInfo struct {
@@ -19,8 +19,8 @@ func (m *ClientUserInfo) UnmarshalBinary(data []byte) error {
 }
 
 type RoomInfo struct {
-	RID RID `json:"rid"`
-	UID UID `json:"uid"`
+	RID string `json:"rid"`
+	UID string `json:"uid"`
 }
 
 /// Messages ///
@@ -49,7 +49,7 @@ type TrickleMsg struct {
 type StreamAddMsg struct {
 	MediaInfo
 	Info   ClientUserInfo `json:"info"`
-	Stream pb.Stream      `json:"stream"`
+	Stream media.Stream   `json:"stream"`
 }
 
 type StreamRemoveMsg struct {

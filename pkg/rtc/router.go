@@ -78,7 +78,7 @@ func (r *Router) start() {
 			select {
 			case subID := <-r.subShutdownCh:
 				log.Infof("Got transport shutdown %v", subID)
-				r.DelSub(string(subID))
+				r.DelSub(subID)
 			default:
 			}
 
@@ -157,7 +157,7 @@ func (r *Router) subWriteLoop(subID string, trans transport.Transport) {
 			// log.Errorf("wt.WriteRTP err=%v", err)
 			// del sub when err is increasing
 			if trans.WriteErrTotal() > maxWriteErr {
-				r.DelSub(string(trans.ID()))
+				r.DelSub(trans.ID())
 			}
 		}
 		trans.WriteErrReset()

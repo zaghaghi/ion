@@ -1,10 +1,11 @@
 package biz
 
 import (
-	nprotoo "github.com/cloudwebrtc/nats-protoo"
 	"github.com/pion/ion/pkg/discovery"
 	"github.com/pion/ion/pkg/log"
-	pb "github.com/pion/ion/pkg/proto/sfu"
+	islb "github.com/pion/ion/pkg/proto/islb"
+	sfu "github.com/pion/ion/pkg/proto/sfu"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -12,9 +13,8 @@ var (
 	dc = "default"
 	//nolint:unused
 	nid      = "biz-unkown-node-id"
-	protoo   *nprotoo.NatsProtoo
-	rpcs     map[string]*nprotoo.Requestor
-	sfus     map[string]pb.SFUClient
+	islbs    map[string]islb.ISLBClient
+	sfus     map[string]sfu.SFUClient
 	services map[string]discovery.Node
 )
 
@@ -23,9 +23,8 @@ func Init(dcID, nodeID, rpcID, eventID string, natsURL string) {
 	dc = dcID
 	nid = nodeID
 	services = make(map[string]discovery.Node)
-	rpcs = make(map[string]*nprotoo.Requestor)
-	sfus = make(map[string]pb.SFUClient)
-	protoo = nprotoo.NewNatsProtoo(natsURL)
+	islbs = make(map[string]islb.ISLBClient)
+	sfus = make(map[string]sfu.SFUClient)
 }
 
 // WatchServiceNodes .
@@ -42,27 +41,30 @@ func WatchServiceNodes(service string, state discovery.NodeStateType, node disco
 		name := node.Info["name"]
 		log.Debugf("Service [%s] %s => %s", service, name, id)
 
-		_, found := rpcs[id]
+		_, found := islbs[id]
 		if !found {
-			rpcID := discovery.GetRPCChannel(node)
-			eventID := discovery.GetEventChannel(node)
+			addr := discovery.GetGRPCAddress(node)
+			conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
+			if err != nil {
+				log.Panicf("did not connect: %v", err)
+			}
+			islbs[id] = islb.NewISLBClient(conn)
 
-			log.Infof("Create islb requestor: rpcID => [%s]", rpcID)
-			rpcs[id] = protoo.NewRequestor(rpcID)
+			log.Infof("Created islb client: grpc => [%s]", addr)
 
-			log.Infof("handleIslbBroadCast: eventID => [%s]", eventID)
-			protoo.OnBroadcast(eventID, handleIslbBroadCast)
+			// log.Infof("handleIslbBroadCast: eventID => [%s]", eventID)
+			// protoo.OnBroadcast(eventID, handleIslbBroadCast)
 		}
 
 	} else if state == discovery.DOWN {
-		delete(rpcs, id)
+		delete(islbs, id)
 		delete(services, id)
 	}
 }
 
 // Close func
 func Close() {
-	if protoo != nil {
-		protoo.Close()
-	}
+	// if protoo != nil {
+	// 	protoo.Close()
+	// }
 }

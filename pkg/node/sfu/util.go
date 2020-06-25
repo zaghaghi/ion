@@ -5,12 +5,12 @@ import (
 
 	"github.com/notedit/sdp"
 	"github.com/pion/ion/pkg/log"
-	pb "github.com/pion/ion/pkg/proto/sfu"
+	media "github.com/pion/ion/pkg/proto/media"
 	transport "github.com/pion/ion/pkg/rtc/transport"
 	"github.com/pion/webrtc/v2"
 )
 
-func getSubPTForTrack(track *pb.Track, sdpObj *sdp.SDPInfo) uint8 {
+func getSubPTForTrack(track *media.Track, sdpObj *sdp.SDPInfo) uint8 {
 	medias := sdpObj.GetMedias()
 	log.Infof("Medias are %v", medias)
 

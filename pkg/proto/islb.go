@@ -1,11 +1,11 @@
 package proto
 
-import pb "github.com/pion/ion/pkg/proto/sfu"
+import media "github.com/pion/ion/pkg/proto/media"
 
 type PubInfo struct {
 	MediaInfo
 	Info   ClientUserInfo `json:"info"`
-	Stream pb.Stream      `json:"stream"`
+	Stream media.Stream   `json:"stream"`
 }
 
 type GetPubResp struct {
@@ -14,13 +14,13 @@ type GetPubResp struct {
 }
 
 type GetMediaParams struct {
-	RID RID
-	MID MID
+	RID string
+	MID string
 }
 
 type FindServiceParams struct {
 	Service string
-	MID     MID
+	MID     string
 }
 
 type GetSFURPCParams struct {
